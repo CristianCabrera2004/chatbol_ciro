@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Documental</title>
+    <style>
+        /* --- ESTILOS MODERNOS (CSS) --- */
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7f6; }
+        
+        /* Botón flotante para abrir el chat */
+        .chat-launcher {
+            position: fixed; bottom: 20px; right: 20px;
+            width: 60px; height: 60px;
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white; border-radius: 50%; border: none; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); font-size: 30px;
+            transition: transform 0.3s ease; z-index: 1000;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .chat-launcher:hover { transform: scale(1.1); }
+
+        /* Ventana del Chat */
+        .chat-window {
+            display: none; /* Oculto al inicio */
+            position: fixed; bottom: 90px; right: 20px;
+            width: 360px; height: 550px; background: white;
+            border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            flex-direction: column; overflow: hidden; z-index: 1000;
+            border: 1px solid #e1e1e1;
+        }
+
+        /* Cabecera Azul */
+        .chat-header {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white; padding: 15px 20px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .chat-header h3 { margin: 0; font-size: 16px; }
+        .chat-header small { opacity: 0.8; font-size: 12px; }
+
+        /* Botón de Recargar Conocimiento */
+        .btn-reload {
+            background: rgba(255,255,255,0.2); border: none; color: white;
+            padding: 5px 10px; border-radius: 15px; cursor: pointer; font-size: 11px;
+            transition: background 0.2s;
+        }
+        .btn-reload:hover { background: rgba(255,255,255,0.4); }
+
+        /* Cuerpo del chat (Mensajes) */
+        .chat-body {
+            flex: 1; padding: 20px; overflow-y: auto; background-color: #f9f9f9;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+
+        /* Burbujas de mensaje */
+        .message { padding: 12px 16px; border-radius: 15px; max-width: 80%; line-height: 1.4; font-size: 14px; word-wrap: break-word; }
+        .user { background-color: #007bff; color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .bot { background-color: #e9ecef; color: #333; align-self: flex-start; border-bottom-left-radius: 2px; }
+
+        /* Zona de escritura (Footer) */
+        .chat-footer {
+            padding: 15px; border-top: 1px solid #eee; background: white;
+            display: flex; align-items: center; gap: 10px;
+        }
+        
+        input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 25px; outline: none; transition: border 0.3s; }
+        input:focus { border-color: #007bff; }
+        
+        /* Botón Micrófono */
+        .btn-mic {
+            background: #f1f3f5; border: none; color: #555;
+            width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s;
+        }
+        .btn-mic:hover { background: #e2e6ea; }
+        .btn-mic.recording { background-color: #ffe3e3; color: #dc3545; animation: pulse 1.5s infinite; }
+
+        /* Animación de grabación */
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); } 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); } }
+
+        /* Botón Enviar */
+        .btn-send { background: none; border: none; color: #007bff; font-size: 20px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <button class="chat-launcher" onclick="toggleChat()">💬</button>
+
+    <div class="chat-window" id="window">
+        <div class="chat-header">
+            <div>
+                <h3>Asistente Virtual</h3>
+                <small>Basado en tus documentos</small>
+            </div>
+            <div>
+                <button class="btn-reload" onclick="recargarConocimiento()" title="Leer nuevos PDFs">🔄 Actualizar</button>
+                <span style="cursor:pointer; margin-left: 15px; font-size: 20px;" onclick="toggleChat()">×</span>
+            </div>
+        </div>
+
+        <div class="chat-body" id="chat-body">
+            <div class="message bot">Hola 👋. He leído tus documentos PDF y estoy listo para responder tus preguntas.</div>
+        </div>
+
+        <div class="chat-footer">
+            <button class="btn-mic" id="btn-mic" title="Hablar por micrófono">🎤</button>
+            <input type="text" id="input-text" placeholder="Escribe o habla..." onkeypress="handleEnter(event)">
+            <button class="btn-send" onclick="enviarMensaje()">➤</button>
+        </div>
+    </div>
+
+    <script>
+        const chatWindow = document.getElementById('window');
+        const chatBody = document.getElementById('chat-body');
+        const inputText = document.getElementById('input-text');
+        const btnMic = document.getElementById('btn-mic');
+
+        // Abrir / Cerrar
+        function toggleChat() {
+            if (chatWindow.style.display === 'flex') {
+                chatWindow.style.display = 'none';
+            } else {
+                chatWindow.style.display = 'flex';
+                // Focalizar el input al abrir
+                setTimeout(() => inputText.focus(), 100); 
+            }
+        }
+
+        // --- FUNCIÓN PRINCIPAL: ENVIAR MENSAJE ---
+        async function enviarMensaje(texto = null) {
+            const mensaje = texto || inputText.value;
+            if (!mensaje.trim()) return;
+
+            // 1. Mostrar mensaje del usuario
+            agregarMensaje(mensaje, 'user');
+            inputText.value = '';
+
+            // 2. Mostrar "Pensando..."
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'message bot';
+            loadingDiv.innerText = 'Consultando documentos...';
+            loadingDiv.id = 'loading-msg';
+            chatBody.appendChild(loadingDiv);
+            chatBody.scrollTop = chatBody.scrollHeight;
+
+            try {
+                // 3. Conectar con el Servidor (Node.js)
+                const res = await fetch('http://localhost:3000/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: mensaje })
+                });
+
+                const data = await res.json();
+                
+                // 4. Quitar "Pensando..." y mostrar respuesta real
+                document.getElementById('loading-msg').remove();
+                agregarMensaje(data.reply, 'bot');
+                
+                // 5. LEER LA RESPUESTA (TTS)
+                hablar(data.reply);
+
+            } catch (error) {
+                if(document.getElementById('loading-msg')) document.getElementById('loading-msg').remove();
+                agregarMensaje("Error: No pude conectar con el servidor. ¿Está encendido?", 'bot');
+            }
+        }
+
+        // --- FUNCIÓN: RECARGAR CONOCIMIENTO ---
+        async function recargarConocimiento() {
+            agregarMensaje("🔄 Leyendo carpeta de archivos...", 'bot');
+            try {
+                const res = await fetch('http://localhost:3000/recargar', { method: 'POST' });
+                const data = await res.json();
+                agregarMensaje("✅ " + data.message, 'bot');
+                hablar("Base de datos actualizada.");
+            } catch (e) {
+                agregarMensaje("❌ Error al recargar.", 'bot');
+            }
+        }
+
+        // --- AUXILIAR: AGREGAR BURBUJA ---
+        function agregarMensaje(txt, tipo) {
+            const div = document.createElement('div');
+            div.className = `message ${tipo}`;
+            
+            // Convertimos saltos de línea a <br> para que se vea bien
+            div.innerHTML = txt.replace(/\n/g, '<br>'); 
+            chatBody.appendChild(div);
+            chatBody.scrollTop = chatBody.scrollHeight;
+        }
+
+        function handleEnter(e) { if(e.key === 'Enter') enviarMensaje(); }
+
+        // --- VOZ DEL AGENTE (Text to Speech) ---
+        function hablar(texto) {
+            window.speechSynthesis.cancel(); // Parar si estaba hablando
+            const voz = new SpeechSynthesisUtterance(texto);
+            voz.lang = 'es-ES'; // Español
+            voz.rate = 1.0;     // Velocidad normal
+            window.speechSynthesis.speak(voz);
+        }
+
+        // --- MICRÓFONO (Speech to Text) ---
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'es-ES';
+            recognition.continuous = false; // Se para cuando dejas de hablar
+
+            btnMic.onclick = () => {
+                if (btnMic.classList.contains('recording')) {
+                    recognition.stop();
+                } else {
+                    recognition.start();
+                }
+            };
+
+            recognition.onstart = () => {
+                btnMic.classList.add('recording');
+                inputText.placeholder = "Escuchando...";
+            };
+            
+            recognition.onend = () => {
+                btnMic.classList.remove('recording');
+                inputText.placeholder = "Escribe o habla...";
+            };
+
+            recognition.onresult = (event) => {
+                const transcripcion = event.results[0][0].transcript;
+                inputText.value = transcripcion;
+                // Enviar automáticamente al detectar silencio final
+                enviarMensaje(transcripcion);
+            };
+        } else {
+            btnMic.style.display = 'none';
+            console.warn("Tu navegador no soporta reconocimiento de voz.");
+        }
+    </script>
+</body>
+</html>
